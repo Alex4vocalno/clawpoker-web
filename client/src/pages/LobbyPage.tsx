@@ -10,12 +10,12 @@ import { toast } from "sonner";
 const LOBBY_BG = "https://private-us-east-1.manuscdn.com/sessionFile/nfk2cCPTs4OFczrdXdX0dl/sandbox/2NDnxiz3oTHelrtmHMAxZR-img-2_1771933750000_na1fn_bG9iYnktYmc.jpg?x-oss-process=image/resize,w_1920,h_1920/format,webp/quality,q_80&Expires=1798761600&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvbmZrMmNDUFRzNE9GY3pyZFhkWDBkbC9zYW5kYm94LzJORG54aXozb1RIZWxydG1ITUF4WlItaW1nLTJfMTc3MTkzMzc1MDAwMF9uYTFmbl9iRzlpWW5rdFltYy5qcGc~eC1vc3MtcHJvY2Vzcz1pbWFnZS9yZXNpemUsd18xOTIwLGhfMTkyMC9mb3JtYXQsd2VicC9xdWFsaXR5LHFfODAiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTg3NjE2MDB9fX1dfQ__&Key-Pair-Id=K2HSFNDJXOU9YS&Signature=DEX-Cb8A8RaaiuyjJiugPYTkk1LQ-kTRSr-UIfEAbI1KliM1CMTWt3ynEZhOSElhjvuVulSmufXM3CMHM05hA4RpfDvvaTPsHq-SlJ5ecC2dlKiVacm0aV4B4959r4a9hrkK5ArRz4thj7k0WgMKN9lgmesjoamUpPFRaCseCuU9tyIFqRQwgthnch0K9c5rbrA1xpXum~alp90QSgcJdYKDxhgCOR9rNln1NFaW~2VFE52MtbNiXxK0e2j7QSzSDkJI41jhXXonXNkb8CLuNEQXdpyDB0RnrIBMI1E5ECKGuhaldMiWXotTpoJMxsLZ9piaR9pU~Gv5a8V79NGkUg__";
 
 const tables = [
-  { id: "1", name: "神殿一号桌", stakes: "1,000 / 2,000", players: 4, maxPlayers: 6, status: "playing", pot: 45200, agents: ["DeepSeek_X", "GPT_Omega", "Claude_Pro", "Gemini_Ultra"] },
-  { id: "2", name: "暗金二号桌", stakes: "500 / 1,000", players: 2, maxPlayers: 6, status: "waiting", pot: 0, agents: ["Llama_Beast", "Mistral_7B"] },
-  { id: "3", name: "硅基三号桌", stakes: "2,000 / 4,000", stakes2: "高额桌", players: 6, maxPlayers: 6, status: "playing", pot: 128000, agents: ["DeepSeek_V3", "GPT_4o", "Claude_Sonnet", "Gemini_Pro", "Qwen_Max", "Yi_Large"] },
-  { id: "4", name: "量子四号桌", stakes: "200 / 400", players: 0, maxPlayers: 6, status: "empty", pot: 0, agents: [] },
-  { id: "5", name: "涌现五号桌", stakes: "5,000 / 10,000", stakes2: "锦标赛", players: 5, maxPlayers: 6, status: "playing", pot: 320000, agents: ["Falcon_180B", "Baichuan_53B", "InternLM_X", "ChatGLM_4", "Spark_Max"] },
-  { id: "6", name: "博弈六号桌", stakes: "100 / 200", players: 3, maxPlayers: 6, status: "playing", pot: 8800, agents: ["Phi_3", "Gemma_7B", "Orca_2"] },
+  { id: "1", name: "神殿一号桌", stakes: "1,000 / 2,000", players: 4, maxPlayers: 6, status: "playing", pot: 45200, phase: "FLOP",     handNum: 42,  agents: ["DeepSeek_X", "GPT_Omega", "Claude_Pro", "Gemini_Ultra", "Llama_Beast", "Mistral_7B"] },
+  { id: "2", name: "暗金二号桌",  stakes: "500 / 1,000",   players: 4, maxPlayers: 6, status: "playing", pot: 3500,   phase: "PREFLOP",  handNum: 17,  agents: ["Llama_Beast", "Mistral_7B", "Phi_3", "Gemma_7B", "Orca_2"] },
+  { id: "3", name: "硅基三号桌",  stakes: "2,000 / 4,000", players: 4, maxPlayers: 6, status: "playing", pot: 128000, phase: "RIVER",    handNum: 88,  agents: ["DeepSeek_X", "GPT_Omega", "Claude_Pro", "Gemini_Ultra", "Qwen_Max", "Yi_Large"], stakes2: "高额桌" },
+  { id: "4", name: "量子四号桌",  stakes: "200 / 400",     players: 2, maxPlayers: 6, status: "playing", pot: 8800,   phase: "TURN",     handNum: 5,   agents: ["Phi_3", "Gemma_7B", "Orca_2"] },
+  { id: "5", name: "涌现五号桌",  stakes: "5,000 / 10,000",players: 2, maxPlayers: 6, status: "playing", pot: 320000, phase: "SHOWDOWN", handNum: 156, agents: ["Falcon_180B", "Baichuan_53B", "InternLM_X", "ChatGLM_4", "Spark_Max"], stakes2: "锦标赛" },
+  { id: "6", name: "博弈六号桌",  stakes: "100 / 200",     players: 2, maxPlayers: 6, status: "playing", pot: 8800,   phase: "FLOP",     handNum: 73,  agents: ["Phi_3", "Gemma_7B", "Orca_2"] },
 ];
 
 const myAgent = {
@@ -147,86 +147,96 @@ export default function LobbyPage() {
               </div>
 
               <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
-                {tables.map((table, i) => (
+                {tables.map((table, i) => {
+                  const phaseColorMap: Record<string, string> = {
+                    PREFLOP: "#C9A84C", FLOP: "#00D4FF", TURN: "#80FF80",
+                    RIVER: "#FF8C00", SHOWDOWN: "#FF4444",
+                  };
+                  const phaseCol = phaseColorMap[table.phase] || "#C9A84C";
+                  return (
                   <motion.div key={table.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
                     className="glass-card rounded-xl overflow-hidden group cursor-pointer hover:scale-[1.02] transition-all duration-300"
-                    style={{ borderColor: table.status === "playing" ? 'rgba(0,212,255,0.2)' : 'rgba(201,168,76,0.15)' }}
+                    style={{ borderColor: `${phaseCol}30` }}
                     onClick={() => handleJoinTable(table.id)}>
                     {/* Table header */}
-                    <div className="px-5 py-4 flex items-center justify-between"
-                      style={{ borderBottom: '1px solid rgba(201,168,76,0.1)' }}>
+                    <div className="px-5 py-3.5 flex items-center justify-between"
+                      style={{ borderBottom: '1px solid rgba(201,168,76,0.1)', background: `${phaseCol}06` }}>
                       <div>
                         <div className="font-bold text-base" style={{ fontFamily: 'Cinzel, serif', color: '#F5E6C8' }}>{table.name}</div>
-                        <div className="text-xs mt-0.5" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.5)' }}>
-                          盲注 {table.stakes}
-                          {table.stakes2 && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'rgba(201,168,76,0.15)', color: '#C9A84C' }}>{table.stakes2}</span>}
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.45)' }}>盲注 {table.stakes}</span>
+                          {table.stakes2 && <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'rgba(201,168,76,0.15)', color: '#C9A84C' }}>{table.stakes2}</span>}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full" style={{ background: statusColor(table.status), animation: table.status === "playing" ? 'pulse-blue 2s infinite' : undefined }} />
-                        <span className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: statusColor(table.status) }}>{statusLabel(table.status)}</span>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ background: phaseCol, animation: 'pulse-blue 2s infinite' }} />
+                          <span className="text-xs font-bold" style={{ fontFamily: 'Rajdhani, sans-serif', color: phaseCol }}>{table.phase}</span>
+                        </div>
+                        <span className="text-[10px]" style={{ fontFamily: 'JetBrains Mono, monospace', color: 'rgba(245,230,200,0.3)' }}>Hand #{table.handNum}</span>
                       </div>
                     </div>
 
                     {/* Table body */}
                     <div className="px-5 py-4">
-                      {/* Pot */}
-                      {table.pot > 0 && (
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="text-xs tracking-wider uppercase" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.4)' }}>底池</span>
-                          <span className="font-bold number-display" style={{ color: '#C9A84C', fontSize: '1.1rem' }}>
-                            {table.pot.toLocaleString()}
+                      {/* Pot + phase info row */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs tracking-wider uppercase" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.35)' }}>底池</span>
+                          <span className="font-bold number-display" style={{ color: '#C9A84C', fontSize: '1.05rem' }}>
+                            {table.pot > 0 ? table.pot.toLocaleString() : "—"}
                           </span>
                         </div>
-                      )}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.4)' }}>进行中</span>
+                        </div>
+                      </div>
 
                       {/* Players */}
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className="flex -space-x-2">
-                          {table.agents.slice(0, 4).map((agent, j) => (
-                            <div key={j} className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="flex -space-x-1.5">
+                          {table.agents.slice(0, 5).map((agent, j) => (
+                            <div key={j} className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
                               style={{
-                                background: `hsl(${j * 60}, 60%, 30%)`,
-                                border: '1px solid rgba(201,168,76,0.3)',
+                                background: `hsl(${j * 55 + 180}, 55%, 28%)`,
+                                border: `1px solid ${phaseCol}40`,
                                 fontFamily: 'JetBrains Mono, monospace',
                                 color: '#F5E6C8',
-                                zIndex: 4 - j,
+                                zIndex: 5 - j,
                               }}>
                               {agent[0]}
                             </div>
                           ))}
-                          {table.agents.length > 4 && (
-                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs"
+                          {table.agents.length > 5 && (
+                            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px]"
                               style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)', color: '#C9A84C' }}>
-                              +{table.agents.length - 4}
+                              +{table.agents.length - 5}
                             </div>
                           )}
                         </div>
-                        <span className="text-sm" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.5)' }}>
-                          {table.players}/{table.maxPlayers} AI 席位
+                        <span className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.45)' }}>
+                          {table.agents.length} AI 参赛
                         </span>
                       </div>
 
-                      {/* Seat progress */}
-                      <div className="flex gap-1 mb-4">
-                        {Array.from({ length: table.maxPlayers }).map((_, j) => (
-                          <div key={j} className="flex-1 h-1.5 rounded-full"
-                            style={{ background: j < table.players ? '#C9A84C' : 'rgba(201,168,76,0.15)' }} />
-                        ))}
+                      {/* Agent name list */}
+                      <div className="text-[10px] mb-3 leading-relaxed" style={{ fontFamily: 'JetBrains Mono, monospace', color: 'rgba(245,230,200,0.3)' }}>
+                        {table.agents.slice(0, 3).join(" · ")}{table.agents.length > 3 ? ` · +${table.agents.length - 3}` : ""}
                       </div>
 
                       <button className="w-full py-2.5 rounded-lg text-sm font-bold tracking-wider uppercase transition-all"
                         style={{
                           fontFamily: 'Rajdhani, sans-serif',
-                          background: table.status === "empty" ? 'linear-gradient(135deg, #C9A84C, #8A6E30)' : 'rgba(0,212,255,0.1)',
-                          color: table.status === "empty" ? '#0A0A0F' : '#00D4FF',
-                          border: table.status === "empty" ? 'none' : '1px solid rgba(0,212,255,0.3)',
+                          background: `${phaseCol}14`,
+                          color: phaseCol,
+                          border: `1px solid ${phaseCol}35`,
                         }}>
-                        {table.status === "empty" ? "加入牌桌" : "观战 →"}
+                        {table.phase === "SHOWDOWN" ? "⚡ 摊牌中 — 观战" : `观战 ${table.phase} →`}
                       </button>
                     </div>
                   </motion.div>
-                ))}
+                  );
+                })}
               </div>
             </motion.div>
           )}
