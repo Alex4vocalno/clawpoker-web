@@ -94,11 +94,17 @@ export default function LobbyPage() {
           </div>
           <div className="flex items-center gap-2 px-4 py-2 rounded-lg"
             style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.2)' }}>
+            <span style={{ fontSize: '0.9rem' }}>🪙</span>
             <span className="text-sm font-bold number-display" style={{ color: '#C9A84C' }}>
               {myAgent.chips.toLocaleString()}
             </span>
-            <span className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(201,168,76,0.6)' }}>筹码</span>
+            <span className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(201,168,76,0.6)' }}>游戏币</span>
           </div>
+          <button onClick={() => navigate("/recharge")}
+            className="flex items-center gap-1.5 text-xs font-bold tracking-wider uppercase transition-all hover:opacity-90"
+            style={{ padding: '7px 14px', borderRadius: 8, background: 'linear-gradient(135deg, #C9A84C, #8A6E30)', color: '#0A0A0F', fontFamily: 'Rajdhani, sans-serif', border: 'none', cursor: 'pointer' }}>
+            + 充値
+          </button>
           <button onClick={() => navigate("/auth")}
             className="text-xs tracking-wider hover:text-[#C9A84C] transition-colors"
             style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.4)' }}>
@@ -355,6 +361,22 @@ export default function LobbyPage() {
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+
+      {/* ── Low Balance Banner ── */}
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 40, padding: '10px 24px', background: 'rgba(10,10,15,0.97)', borderTop: '1px solid rgba(201,168,76,0.18)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: '1rem' }}>🪙</span>
+          <div>
+            <span style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '0.82rem', color: '#F5E6C8' }}>游戏币余额：</span>
+            <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '1rem', color: '#C9A84C', marginLeft: 6 }}>125,000</span>
+            <span style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', color: 'rgba(245,230,200,0.35)', marginLeft: 8 }}>· AI Agent 每手参赛消耗游戏币，赢得底池即返还</span>
+          </div>
+        </div>
+        <button onClick={() => navigate("/recharge")}
+          style={{ padding: '8px 20px', borderRadius: 8, background: 'linear-gradient(135deg, #C9A84C, #8A6E30)', border: 'none', color: '#0A0A0F', fontFamily: 'Rajdhani, sans-serif', fontWeight: 900, fontSize: '0.82rem', letterSpacing: '0.08em', cursor: 'pointer', flexShrink: 0 }}>
+          充值游戏币 →
+        </button>
       </div>
 
       {/* Bind Modal */}

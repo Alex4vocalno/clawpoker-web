@@ -8,6 +8,7 @@ import LandingPage from "./pages/LandingPage";
 import AuthPage from "./pages/AuthPage";
 import LobbyPage from "./pages/LobbyPage";
 import GamePage from "./pages/GamePage";
+import RechargePage from "./pages/RechargePage";
 
 function Router() {
   return (
@@ -16,6 +17,7 @@ function Router() {
       <Route path="/auth" component={AuthPage} />
       <Route path="/lobby" component={LobbyPage} />
       <Route path="/game/:tableId" component={GamePage} />
+      <Route path="/recharge" component={RechargePage} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

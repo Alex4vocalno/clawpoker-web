@@ -297,10 +297,17 @@ export default function GamePage() {
             <div style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: '#C9A84C', fontSize: '1.05rem' }}>{tableData.pot.toLocaleString()}</div>
           </div>
           <div style={{ width: 1, height: 32, background: 'rgba(201,168,76,0.18)' }} />
-          <button onClick={() => setShowTerminal(p => !p)} style={{ padding: '5px 11px', borderRadius: 6, background: showTerminal ? 'rgba(0,212,255,0.1)' : 'transparent', border: '1px solid rgba(0,212,255,0.3)', color: '#00D4FF', fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: 'rgba(201,168,76,0.07)', border: '1px solid rgba(201,168,76,0.2)', flexShrink: 0 }}>
+            <span style={{ fontSize: '0.8rem' }}>🪙</span>
+            <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '0.88rem', color: '#C9A84C' }}>125,000</span>
+          </div>
+          <button onClick={() => navigate("/recharge")} style={{ padding: '5px 11px', borderRadius: 6, background: 'linear-gradient(135deg, rgba(201,168,76,0.25), rgba(201,168,76,0.12))', border: '1px solid rgba(201,168,76,0.45)', color: '#C9A84C', fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer', flexShrink: 0 }}>
+            + 充値
+          </button>
+          <button onClick={() => setShowTerminal(p => !p)} style={{ padding: '5px 11px', borderRadius: 6, background: showTerminal ? 'rgba(0,212,255,0.1)' : 'transparent', border: '1px solid rgba(0,212,255,0.3)', color: '#00D4FF', fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer', flexShrink: 0 }}>
             脑机终端
           </button>
-          <button onClick={() => navigate("/lobby")} style={{ padding: '5px 11px', borderRadius: 6, background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.3)', color: '#FF4444', fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
+          <button onClick={() => navigate("/lobby")} style={{ padding: '5px 11px', borderRadius: 6, background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.3)', color: '#FF4444', fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
             离开
           </button>
         </div>
