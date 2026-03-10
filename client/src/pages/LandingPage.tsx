@@ -7,6 +7,7 @@
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
+import { getToken } from "@/lib/api";
 
 const HERO_IMG = "https://private-us-east-1.manuscdn.com/sessionFile/nfk2cCPTs4OFczrdXdX0dl/sandbox/2NDnxiz3oTHelrtmHMAxZR-img-1_1771933757000_na1fn_aGVyby10YWJsZQ.jpg?x-oss-process=image/resize,w_1920,h_1920/format,webp/quality,q_80&Expires=1798761600&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvbmZrMmNDUFRzNE9GY3pyZFhkWDBkbC9zYW5kYm94LzJORG54aXozb1RIZWxydG1ITUF4WlItaW1nLTFfMTc3MTkzMzc1NzAwMF9uYTFmbl9hR1Z5YnkxMFlXSnNaUS5qcGc~eC1vc3MtcHJvY2Vzcz1pbWFnZS9yZXNpemUsd18xOTIwLGhfMTkyMC9mb3JtYXQsd2VicC9xdWFsaXR5LHFfODAiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTg3NjE2MDB9fX1dfQ__&Key-Pair-Id=K2HSFNDJXOU9YS&Signature=VK70BRy1HcBzLNl2bmLcucPp4ouFXH-fixSii3ADmNdACaZ2taiXroGf6H~5zCbWcS7b3ftywcSVuFaTbv~0OlGeLKyCxxRxciEnKe2jINPlpOgz1wYcKHQoMSJx5J90bB~8fpIRpUYC8yPCO4ZqsbqlQThylgs5GCjr8pNjbN7i1~n3xE5r-60z3FldpdlNkAQpBpyZAa9AdW4XapOpvl5kH4mjfkrCU40oUZFQgbj-FBUN-GWC2jI~wvFdQqyjZJZUcMrXuipEqDp4hoBkKIkm9PcwvjujCKHeHCrCNCxrfnvxKjrXZo314NOt5yECcnupkBOA-cp3mE6XnpKvUw__";
 const LOBBY_BG = "https://private-us-east-1.manuscdn.com/sessionFile/nfk2cCPTs4OFczrdXdX0dl/sandbox/2NDnxiz3oTHelrtmHMAxZR-img-2_1771933750000_na1fn_bG9iYnktYmc.jpg?x-oss-process=image/resize,w_1920,h_1920/format,webp/quality,q_80&Expires=1798761600&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvbmZrMmNDUFRzNE9GY3pyZFhkWDBkbC9zYW5kYm94LzJORG54aXozb1RIZWxydG1ITUF4WlItaW1nLTJfMTc3MTkzMzc1MDAwMF9uYTFmbl9iRzlpWW5rdFltYy5qcGc~eC1vc3MtcHJvY2Vzcz1pbWFnZS9yZXNpemUsd18xOTIwLGhfMTkyMC9mb3JtYXQsd2VicC9xdWFsaXR5LHFfODAiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTg3NjE2MDB9fX1dfQ__&Key-Pair-Id=K2HSFNDJXOU9YS&Signature=DEX-Cb8A8RaaiuyjJiugPYTkk1LQ-kTRSr-UIfEAbI1KliM1CMTWt3ynEZhOSElhjvuVulSmufXM3CMHM05hA4RpfDvvaTPsHq-SlJ5ecC2dlKiVacm0aV4B4959r4a9hrkK5ArRz4thj7k0WgMKN9lgmesjoamUpPFRaCseCuU9tyIFqRQwgthnch0K9c5rbrA1xpXum~alp90QSgcJdYKDxhgCOR9rNln1NFaW~2VFE52MtbNiXxK0e2j7QSzSDkJI41jhXXonXNkb8CLuNEQXdpyDB0RnrIBMI1E5ECKGuhaldMiWXotTpoJMxsLZ9piaR9pU~Gv5a8V79NGkUg__";
@@ -185,7 +186,7 @@ export default function LandingPage() {
 
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 1 }}
             className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button onClick={() => navigate("/lobby")}
+            <button onClick={() => navigate(getToken() ? "/lobby" : "/auth")}
               className="btn-gold px-10 py-4 rounded text-base"
               style={{ fontFamily: 'Cinzel, serif', letterSpacing: '0.15em' }}>
               进入竞技场

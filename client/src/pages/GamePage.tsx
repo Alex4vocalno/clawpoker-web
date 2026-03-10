@@ -3,7 +3,7 @@
  * Design: 暗金电竞神殿 | Dark Luxury E-sports × Temple Aesthetics
  * 每张桌子通过 tableId 加载独立牌局数据（tableData.ts）
  */
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useParams } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -13,18 +13,28 @@ import {
   type AgentData,
   type TerminalLine,
   type DanmakuItem,
+  type TableGameData,
 } from "@/lib/tableData";
+import {
+  getGameState,
+  getGameStreamUrl,
+  leaveTable,
+  startTable,
+  getToken,
+  me,
+  getWalletBalance,
+  type ApiGameState,
+} from "@/lib/api";
 
 // ─── Card Component ──────────────────────────────────────────────────────────
 const SUIT_SYM: Record<string, string> = { s: "♠", h: "♥", d: "♦", c: "♣" };
 const SUIT_COL: Record<string, string> = { s: "#111", h: "#CC2222", d: "#CC2222", c: "#111" };
 
 function PlayingCard({ card, small = false, revealed = false }: { card: string; small?: boolean; revealed?: boolean }) {
-  const isHidden = card === "XX";
   const w = small ? 28 : 44;
   const h = small ? 38 : 60;
 
-  if (isHidden && !revealed) {
+  if (!revealed || card === "XX") {
     return (
       <div style={{
         width: w, height: h, borderRadius: 4, overflow: 'hidden', flexShrink: 0,
@@ -179,12 +189,132 @@ function termPrefix(t: TerminalLine["type"]) {
   }
 }
 
+// ─── API → TableGameData adapter ─────────────────────────────────────────────
+const SUIT_SHORT: Record<string, string> = { spades: "s", hearts: "h", diamonds: "d", clubs: "c" };
+
+function cardObjToStr(c: unknown): string {
+  if (typeof c === "string") return c;
+  if (c && typeof c === "object" && "rank" in c && "suit" in c) {
+    const obj = c as { rank: string; suit: string };
+    return `${obj.rank}${SUIT_SHORT[obj.suit] ?? obj.suit[0]?.toLowerCase() ?? "?"}`;
+  }
+  return "XX";
+}
+
+function apiToTableData(api: ApiGameState, tableId: string, myPlayerId?: string | null): TableGameData {
+  const phaseMap: Record<string, string> = {
+    preflop: "PREFLOP", flop: "FLOP", turn: "TURN", river: "RIVER",
+    showdown: "SHOWDOWN", finished: "SHOWDOWN",
+  };
+  const cards = (api.hand?.communityCards ?? []).map(cardObjToStr);
+  const nickMap: Record<string, string> = {};
+  for (const s of api.seats) {
+    if (s.playerId) nickMap[s.playerId] = s.user || s.agentName || s.playerId;
+  }
+  const agents: AgentData[] = api.seats
+    .filter(s => s.playerId)
+    .map((s, i) => {
+      const playerActions = api.actions.filter(a => a.playerId === s.playerId);
+      const last = playerActions[playerActions.length - 1];
+      const actionMap: Record<string, string> = {
+        fold: "FOLD", check: "CHECK", call: "CALL", raise: "RAISE", all_in: "ALL_IN", bet: "BET",
+      };
+      const holeCards = (s.holeCards ?? []).map(cardObjToStr);
+      return {
+        id: s.playerId!,
+        name: s.user || s.agentName || s.playerId!,
+        model: s.agentName ?? "Player",
+        chips: s.stack,
+        bet: 0,
+        cards: holeCards.length >= 2 ? holeCards : ["XX", "XX"],
+        status: last?.actionType === "fold" ? "folded" : "acted" as AgentData["status"],
+        isActive: false,
+        seatIndex: Math.min(i, 5),
+        isDealer: false,
+        lastAction: last ? (actionMap[last.actionType] ?? last.actionType.toUpperCase()) as any : undefined,
+        lastAmount: last?.amount ?? undefined,
+      };
+    });
+  const actionLog = api.actions.slice(-8).map(a => ({
+    agent: nickMap[a.playerId] ?? a.playerId,
+    action: a.actionType.toUpperCase(),
+    amount: a.amount ?? undefined,
+    color: "#C9A84C",
+    reasoning: a.reasoning ?? undefined,
+  }));
+  const terminalScript: TerminalLine[] = [];
+  for (const a of api.actions.slice(-8)) {
+    const who = nickMap[a.playerId] ?? a.playerId;
+    terminalScript.push({
+      id: `t-act-${a.seq}`,
+      text: `${who} → ${a.actionType.toUpperCase()}${a.amount ? ` ${a.amount}` : ""}`,
+      type: "decision" as const,
+    });
+    const canSeeReasoning = myPlayerId ? a.playerId === myPlayerId : false;
+    if (a.reasoning && canSeeReasoning) {
+      terminalScript.push({
+        id: `t-rsn-${a.seq}`,
+        text: `[${who}] ${a.reasoning}`,
+        type: "thinking" as const,
+      });
+    }
+  }
+  const myReasoningActions = api.actions.filter(a => a.reasoning && myPlayerId && a.playerId === myPlayerId).slice(-3);
+  const danmakuPool: DanmakuItem[] = myReasoningActions.length > 0
+    ? myReasoningActions.map(a => ({
+        text: `${a.actionType.toUpperCase()}: ${a.reasoning!}`,
+        agent: nickMap[a.playerId] ?? a.playerId,
+      }))
+    : agents.slice(0, 3).map(a => ({
+        text: `${a.name} 正在分析局面...`, agent: a.name,
+      }));
+  const winners = api.hand?.winners as Array<{ playerId: string; amount: number }> | undefined;
+  let prevSummary = "";
+  if (winners?.length) {
+    prevSummary = "🏆 " + winners.map(w => `${nickMap[w.playerId] ?? w.playerId} 赢得 ${w.amount} 筹码`).join(" | ");
+  }
+  const handStatus = (api.hand?.status ?? "").toLowerCase();
+  if (handStatus === "end" || handStatus === "showdown") {
+    if (!prevSummary) prevSummary = "本手已结束，等待下一手...";
+  }
+
+  return {
+    tableId,
+    tableName: tableId,
+    stakes: `${api.table.smallBlind} / ${api.table.bigBlind}`,
+    phase: (phaseMap[(api.hand?.status ?? "").toLowerCase()] || (api.table.status === "playing" ? "PLAYING" : "WAITING")) as any,
+    pot: api.hand?.potTotal ?? 0,
+    rake: api.hand?.rake ?? 0,
+    handNum: api.hand?.handId ?? 0,
+    boardCards: cards.length > 0 ? cards : [],
+    agents,
+    actionLog,
+    terminalScript: terminalScript.length > 0 ? terminalScript : [{ id: "t0", text: "等待牌局开始...", type: "system" }],
+    danmakuPool: danmakuPool.length > 0 ? danmakuPool : [{ text: "等待 AI Agent 思考中...", agent: "SYSTEM" }],
+    prevHandSummary: prevSummary || "暂无上局记录",
+  };
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 export default function GamePage() {
   const [, navigate] = useLocation();
   const params = useParams<{ tableId: string }>();
   const tableId = params.tableId || "1";
-  const tableData = getTableData(tableId);
+  const fallbackData = getTableData(tableId);
+
+  const [liveData, setLiveData] = useState<TableGameData | null>(null);
+  const [tableStatus, setTableStatus] = useState<string>("unknown");
+  const [handResult, setHandResult] = useState<{ winners: string; pot: number } | null>(null);
+  const [gameOver, setGameOver] = useState<{ winner: string | null; reason: string } | null>(null);
+  const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const tableData = liveData || fallbackData;
+  const nickMapRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    me().then(res => setMyPlayerId(`p_${res.user.userId}`)).catch(() => {});
+    getWalletBalance().then(w => setWalletBalance(w.balance + w.lockedBalance)).catch(() => {});
+  }, []);
 
   const [actionClock, setActionClock] = useState(12);
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
@@ -200,6 +330,112 @@ export default function GamePage() {
   const activeAgent = tableData.agents.find(a => a.isActive);
   const isShowdown = tableData.phase === "SHOWDOWN";
 
+  // Load real game state from API
+  const loadGameState = useCallback(async () => {
+    try {
+      const state = await getGameState(tableId);
+      const mapped = apiToTableData(state, tableId, myPlayerId);
+      setLiveData(mapped);
+      setTableStatus(state.table.status);
+      const nicks: Record<string, string> = {};
+      for (const s of state.seats) {
+        if (s.playerId) nicks[s.playerId] = s.user || s.agentName || s.playerId;
+      }
+      nickMapRef.current = nicks;
+    } catch {
+      // API unavailable, fall back to demo data
+    }
+  }, [tableId, myPlayerId]);
+
+  useEffect(() => {
+    loadGameState();
+    const iv = setInterval(loadGameState, 4000);
+    return () => clearInterval(iv);
+  }, [loadGameState]);
+
+  // SSE stream for real-time updates
+  useEffect(() => {
+    const url = getGameStreamUrl(tableId);
+    const token = getToken();
+    const es = new EventSource(token ? `${url}?token=${token}` : url);
+
+    const handleSnapshot = (ev: MessageEvent) => {
+      try {
+        const data = JSON.parse(ev.data);
+        if (data && data.table) {
+          setLiveData(apiToTableData(data, tableId, myPlayerId));
+          setTableStatus(data.table?.status ?? "unknown");
+        }
+      } catch { /* ignore */ }
+    };
+    const handleStateUpdated = (ev: MessageEvent) => {
+      try {
+        const data = JSON.parse(ev.data);
+        if (data.tableId !== tableId) return;
+        const actionLog = data.state?.actionLog as Array<{ playerId: string; move: string; amount?: number; reasoning?: string }> | undefined;
+        if (actionLog?.length) {
+          const last = actionLog[actionLog.length - 1];
+          const nicks = nickMapRef.current;
+          const who = nicks[last.playerId] ?? last.playerId;
+          const actionLine: TerminalLine = {
+            id: `sse-act-${Date.now()}`,
+            text: `${who} → ${last.move.toUpperCase()}${last.amount ? ` ${last.amount}` : ""}`,
+            type: "decision" as const,
+          };
+          setTerminalLines(prev => [...prev.slice(-28), actionLine]);
+          const isMyAction = myPlayerId && last.playerId === myPlayerId;
+          if (last.reasoning && isMyAction) {
+            const reasonLine: TerminalLine = {
+              id: `sse-rsn-${Date.now()}`,
+              text: `[${who}] ${last.reasoning}`,
+              type: "thinking" as const,
+            };
+            setTimeout(() => setTerminalLines(prev => [...prev.slice(-28), reasonLine]), 200);
+          }
+        }
+        loadGameState();
+      } catch { /* ignore */ }
+    };
+    const handleHandFinished = (ev: MessageEvent) => {
+      try {
+        const data = JSON.parse(ev.data);
+        if (data.tableId === tableId) {
+          const result = data.result?.payload;
+          if (result?.winners?.length) {
+            const nicks = nickMapRef.current;
+            const rakeInfo = result.rake > 0 ? ` (抽水 ${result.rake})` : "";
+            const winnerNames = result.winners.map((w: any) => {
+              const name = nicks[w.player_id] ?? w.player_id;
+              return `${name} 赢得 ${w.chips_won}`;
+            });
+            setHandResult({ winners: winnerNames.join(" | ") + rakeInfo, pot: result.winners.reduce((s: number, w: any) => s + (w.chips_won ?? 0), 0) });
+            setTimeout(() => setHandResult(null), 4500);
+          }
+          getWalletBalance().then(w => setWalletBalance(w.balance + w.lockedBalance)).catch(() => {});
+          loadGameState();
+        }
+      } catch { /* ignore */ }
+    };
+    const handleGameEnded = (ev: MessageEvent) => {
+      try {
+        const data = JSON.parse(ev.data);
+        if (data.tableId === tableId) {
+          const winnerName = nickMapRef.current[data.winner] ?? data.winner;
+          setGameOver({ winner: winnerName, reason: data.reason });
+          setTableStatus("waiting");
+          loadGameState();
+        }
+      } catch { /* ignore */ }
+    };
+
+    es.addEventListener("snapshot", handleSnapshot);
+    es.addEventListener("table.state.updated", handleStateUpdated);
+    es.addEventListener("hand.finished", handleHandFinished);
+    es.addEventListener("table.game.ended", handleGameEnded);
+    es.onerror = () => { /* SSE reconnects automatically */ };
+    return () => es.close();
+  }, [tableId, loadGameState, myPlayerId]);
+
   // Reset state when tableId changes
   useEffect(() => {
     setActionClock(12);
@@ -208,6 +444,7 @@ export default function GamePage() {
     setCharIdx(0);
     setDisplayedLine("");
     setDanmakuMsgs([]);
+    setLiveData(null);
   }, [tableId]);
 
   // Action clock
@@ -299,7 +536,7 @@ export default function GamePage() {
           <div style={{ width: 1, height: 32, background: 'rgba(201,168,76,0.18)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: 'rgba(201,168,76,0.07)', border: '1px solid rgba(201,168,76,0.2)', flexShrink: 0 }}>
             <span style={{ fontSize: '0.8rem' }}>🪙</span>
-            <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '0.88rem', color: '#C9A84C' }}>125,000</span>
+            <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '0.88rem', color: '#C9A84C' }}>{walletBalance.toLocaleString()}</span>
           </div>
           <button onClick={() => navigate("/recharge")} style={{ padding: '5px 11px', borderRadius: 6, background: 'linear-gradient(135deg, rgba(201,168,76,0.25), rgba(201,168,76,0.12))', border: '1px solid rgba(201,168,76,0.45)', color: '#C9A84C', fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer', flexShrink: 0 }}>
             + 充値
@@ -307,7 +544,19 @@ export default function GamePage() {
           <button onClick={() => setShowTerminal(p => !p)} style={{ padding: '5px 11px', borderRadius: 6, background: showTerminal ? 'rgba(0,212,255,0.1)' : 'transparent', border: '1px solid rgba(0,212,255,0.3)', color: '#00D4FF', fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer', flexShrink: 0 }}>
             脑机终端
           </button>
-          <button onClick={() => navigate("/lobby")} style={{ padding: '5px 11px', borderRadius: 6, background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.3)', color: '#FF4444', fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+          {tableStatus === "waiting" && tableData.agents.length >= 2 && (
+            <button onClick={async () => { try { await startTable(tableId); toast.success("对局已开始！"); loadGameState(); } catch (err) { toast.error(err instanceof Error ? err.message : "开始失败"); } }}
+              style={{ padding: '5px 11px', borderRadius: 6, background: 'linear-gradient(135deg, #C9A84C, #8A6E30)', border: '1px solid rgba(201,168,76,0.6)', color: '#0A0A0F', fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+              开始对局
+            </button>
+          )}
+          <button onClick={async () => {
+            if (tableStatus === "playing") {
+              if (!confirm("对局进行中，离开将放弃桌上筹码。确定离开？")) return;
+            }
+            try { await leaveTable(tableId, "forfeit"); } catch { /* ignore */ }
+            navigate("/lobby");
+          }} style={{ padding: '5px 11px', borderRadius: 6, background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.3)', color: '#FF4444', fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
             离开
           </button>
         </div>
@@ -405,6 +654,57 @@ export default function GamePage() {
             ))}
           </div>
 
+          {/* Hand result toast */}
+          <AnimatePresence>
+            {handResult && (
+              <motion.div
+                initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+                style={{
+                  position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 50,
+                  padding: '10px 28px', borderRadius: 12,
+                  background: 'linear-gradient(135deg, rgba(201,168,76,0.25), rgba(201,168,76,0.12))',
+                  border: '2px solid rgba(201,168,76,0.6)',
+                  boxShadow: '0 8px 32px rgba(201,168,76,0.3)',
+                  fontFamily: 'Cinzel, serif', fontSize: '0.95rem', fontWeight: 700,
+                  color: '#C9A84C', textAlign: 'center', whiteSpace: 'nowrap',
+                }}>
+                🏆 {handResult.winners}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Game over overlay */}
+          <AnimatePresence>
+            {gameOver && (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                style={{
+                  position: 'absolute', inset: 0, zIndex: 60,
+                  background: 'rgba(10,10,15,0.88)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20,
+                }}>
+                <div style={{ fontFamily: 'Cinzel, serif', fontSize: '2rem', fontWeight: 700, color: '#C9A84C', letterSpacing: '0.15em', textShadow: '0 0 30px rgba(201,168,76,0.5)' }}>
+                  GAME OVER
+                </div>
+                {gameOver.winner && (
+                  <div style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '1.2rem', color: '#F5E6C8' }}>
+                    🏆 <span style={{ color: '#C9A84C', fontWeight: 700 }}>{gameOver.winner}</span> 赢得全部筹码！
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
+                  <button onClick={() => { setGameOver(null); loadGameState(); }}
+                    style={{ padding: '10px 24px', borderRadius: 8, background: 'linear-gradient(135deg, #C9A84C, #8A6E30)', border: '1px solid rgba(201,168,76,0.6)', color: '#0A0A0F', fontFamily: 'Rajdhani, sans-serif', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+                    继续观看
+                  </button>
+                  <button onClick={() => navigate("/lobby")}
+                    style={{ padding: '10px 24px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(201,168,76,0.3)', color: '#C9A84C', fontFamily: 'Rajdhani, sans-serif', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+                    返回大厅
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Table area */}
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 20px', position: 'relative' }}>
             <div style={{ position: 'relative', width: '100%', maxWidth: 680, aspectRatio: '16/10' }}>
@@ -428,7 +728,7 @@ export default function GamePage() {
                 <div style={{ position: 'absolute', top: '35%', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 5, alignItems: 'center', zIndex: 10 }}>
                   {tableData.boardCards.map((card, i) => (
                     <motion.div key={`${tableId}-board-${i}`} initial={{ rotateY: 90, opacity: 0, y: -10 }} animate={{ rotateY: 0, opacity: 1, y: 0 }} transition={{ delay: i * 0.1, duration: 0.35 }}>
-                      <PlayingCard card={card} revealed={isShowdown} />
+                      <PlayingCard card={card} revealed />
                     </motion.div>
                   ))}
                   {Array.from({ length: Math.max(0, 5 - tableData.boardCards.length) }).map((_, i) => (
@@ -441,6 +741,12 @@ export default function GamePage() {
                   <div style={{ padding: '4px 14px', borderRadius: 20, background: 'rgba(10,10,15,0.88)', border: '1px solid rgba(201,168,76,0.4)', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '0.62rem', color: 'rgba(201,168,76,0.55)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>POT</span>
                     <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: '#C9A84C', fontSize: '1rem' }}>{tableData.pot.toLocaleString()}</span>
+                    {tableData.rake > 0 && (
+                      <>
+                        <span style={{ width: 1, height: 14, background: 'rgba(201,168,76,0.25)' }} />
+                        <span style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '0.55rem', color: 'rgba(255,100,100,0.7)', letterSpacing: '0.05em' }}>抽水 {tableData.rake.toLocaleString()}</span>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -469,10 +775,11 @@ export default function GamePage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto' }}>
               <span style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '0.62rem', color: 'rgba(245,230,200,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>行动记录</span>
               {tableData.actionLog.map((log, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 6, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)', flexShrink: 0 }}>
+                <div key={i} title={log.reasoning || undefined} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 6, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)', flexShrink: 0, cursor: log.reasoning ? 'help' : undefined }}>
                   <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.62rem', color: log.color }}>{log.agent}</span>
                   <span style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '0.66rem', color: log.color }}>{log.action}</span>
                   {log.amount && <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '0.66rem', color: '#C9A84C' }}>+{log.amount >= 1000 ? (log.amount/1000).toFixed(0)+'K' : log.amount}</span>}
+                  {log.reasoning && <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.56rem', color: 'rgba(201,168,76,0.5)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>💭 {log.reasoning}</span>}
                 </div>
               ))}
             </div>
@@ -509,7 +816,7 @@ export default function GamePage() {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <div style={{ display: 'flex', gap: 3 }}>
                       {agent.cards.map((card, j) => (
-                        <PlayingCard key={`${agent.id}-${j}`} card={card} small revealed={isShowdown} />
+                        <PlayingCard key={`${agent.id}-${j}`} card={card} small revealed={agent.id === myPlayerId || isShowdown} />
                       ))}
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>

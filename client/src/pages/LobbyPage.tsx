@@ -2,31 +2,20 @@
  * LobbyPage — ClawPoker 竞技场大厅
  * Design: 暗金电竞神殿 | Dark Luxury E-sports × Temple Aesthetics
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { me, listTables, joinTable, clearToken, bindAgent, unbindAgent, getToken, createTable } from "@/lib/api";
 
 const LOBBY_BG = "https://private-us-east-1.manuscdn.com/sessionFile/nfk2cCPTs4OFczrdXdX0dl/sandbox/2NDnxiz3oTHelrtmHMAxZR-img-2_1771933750000_na1fn_bG9iYnktYmc.jpg?x-oss-process=image/resize,w_1920,h_1920/format,webp/quality,q_80&Expires=1798761600&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvbmZrMmNDUFRzNE9GY3pyZFhkWDBkbC9zYW5kYm94LzJORG54aXozb1RIZWxydG1ITUF4WlItaW1nLTJfMTc3MTkzMzc1MDAwMF9uYTFmbl9iRzlpWW5rdFltYy5qcGc~eC1vc3MtcHJvY2Vzcz1pbWFnZS9yZXNpemUsd18xOTIwLGhfMTkyMC9mb3JtYXQsd2VicC9xdWFsaXR5LHFfODAiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTg3NjE2MDB9fX1dfQ__&Key-Pair-Id=K2HSFNDJXOU9YS&Signature=DEX-Cb8A8RaaiuyjJiugPYTkk1LQ-kTRSr-UIfEAbI1KliM1CMTWt3ynEZhOSElhjvuVulSmufXM3CMHM05hA4RpfDvvaTPsHq-SlJ5ecC2dlKiVacm0aV4B4959r4a9hrkK5ArRz4thj7k0WgMKN9lgmesjoamUpPFRaCseCuU9tyIFqRQwgthnch0K9c5rbrA1xpXum~alp90QSgcJdYKDxhgCOR9rNln1NFaW~2VFE52MtbNiXxK0e2j7QSzSDkJI41jhXXonXNkb8CLuNEQXdpyDB0RnrIBMI1E5ECKGuhaldMiWXotTpoJMxsLZ9piaR9pU~Gv5a8V79NGkUg__";
 
-const tables = [
-  { id: "1", name: "神殿一号桌", stakes: "1,000 / 2,000", players: 4, maxPlayers: 6, status: "playing", pot: 45200, phase: "FLOP",     handNum: 42,  agents: ["DeepSeek_X", "GPT_Omega", "Claude_Pro", "Gemini_Ultra", "Llama_Beast", "Mistral_7B"] },
-  { id: "2", name: "暗金二号桌",  stakes: "500 / 1,000",   players: 4, maxPlayers: 6, status: "playing", pot: 3500,   phase: "PREFLOP",  handNum: 17,  agents: ["Llama_Beast", "Mistral_7B", "Phi_3", "Gemma_7B", "Orca_2"] },
-  { id: "3", name: "硅基三号桌",  stakes: "2,000 / 4,000", players: 4, maxPlayers: 6, status: "playing", pot: 128000, phase: "RIVER",    handNum: 88,  agents: ["DeepSeek_X", "GPT_Omega", "Claude_Pro", "Gemini_Ultra", "Qwen_Max", "Yi_Large"], stakes2: "高额桌" },
-  { id: "4", name: "量子四号桌",  stakes: "200 / 400",     players: 2, maxPlayers: 6, status: "playing", pot: 8800,   phase: "TURN",     handNum: 5,   agents: ["Phi_3", "Gemma_7B", "Orca_2"] },
-  { id: "5", name: "涌现五号桌",  stakes: "5,000 / 10,000",players: 2, maxPlayers: 6, status: "playing", pot: 320000, phase: "SHOWDOWN", handNum: 156, agents: ["Falcon_180B", "Baichuan_53B", "InternLM_X", "ChatGLM_4", "Spark_Max"], stakes2: "锦标赛" },
-  { id: "6", name: "博弈六号桌",  stakes: "100 / 200",     players: 2, maxPlayers: 6, status: "playing", pot: 8800,   phase: "FLOP",     handNum: 73,  agents: ["Phi_3", "Gemma_7B", "Orca_2"] },
-];
-
-const myAgent = {
-  name: "DeepSeek_X",
-  status: "ready",
-  token: "CP-7F3A9B2E",
-  wins: 47,
-  losses: 23,
-  winRate: 67.1,
-  chips: 125000,
+type TableRow = {
+  id: string; name: string; stakes: string; players: number; maxPlayers: number;
+  status: string; pot: number; phase: string; handNum: number; agents: string[];
+  stakes2?: string;
 };
+type AgentRow = { agentId: string; name: string; status: string; model: string | null };
 
 type Tab = "tables" | "agent" | "leaderboard";
 
@@ -35,16 +24,65 @@ export default function LobbyPage() {
   const [activeTab, setActiveTab] = useState<Tab>("tables");
   const [showBindModal, setShowBindModal] = useState(false);
   const [bindStep, setBindStep] = useState(0);
-  const [generatedToken, setGeneratedToken] = useState("");
+  const [bindUrl, setBindUrl] = useState("");
+  const [bindToken, setBToken] = useState("");
+  const [bindingAgentId, setBindingAgentId] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newTableName, setNewTableName] = useState("");
+  const [newSmallBlind, setNewSmallBlind] = useState("10");
+  const [newBigBlind, setNewBigBlind] = useState("20");
+  const [creatingTable, setCreatingTable] = useState(false);
+  const [tables, setTables] = useState<TableRow[]>([]);
+  const [agents, setAgents] = useState<AgentRow[]>([]);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [displayName, setDisplayName] = useState("");
 
-  const handleGenerateToken = () => {
-    const token = "CP-" + Math.random().toString(36).substring(2, 10).toUpperCase();
-    setGeneratedToken(token);
-    setBindStep(1);
-  };
+  const myAgent = agents[0] ?? { agentId: "", name: "未绑定", status: "offline", model: null };
 
-  const handleJoinTable = (tableId: string) => {
-    navigate(`/game/${tableId}`);
+  useEffect(() => {
+    if (!getToken()) { navigate("/auth"); return; }
+    loadData();
+  }, []);
+
+  async function loadData() {
+    try {
+      const [meRes, tableRes] = await Promise.all([me(), listTables()]);
+      setDisplayName(meRes.user.displayName);
+      setWalletBalance(meRes.user.walletBalance);
+      setAgents(meRes.agents);
+      setTables(tableRes.tables.map((t: any, idx: number) => {
+        const displayName = t.name ?? t.tableId;
+        return {
+          id: t.tableId, name: displayName, stakes: `${t.smallBlind} / ${t.bigBlind}`,
+          players: t.currentPlayers, maxPlayers: t.maxPlayers, status: t.status,
+          pot: 0, phase: (t.status === "playing" && t.currentPlayers >= 2) ? "PLAYING" : "WAITING", handNum: 0,
+          agents: t.seats?.map((s: any) => s.user) ?? [],
+        };
+      }));
+    } catch {
+      clearToken(); navigate("/auth");
+    }
+  }
+
+  const handleJoinTable = async (tableId: string) => {
+    const boundAgent = agents.find(a => a.status !== "offline");
+    if (!boundAgent) {
+      toast.error("请先在「Agent 管理」中绑定你的 Agent（配置 Gateway URL 和 Token），才能加入牌桌");
+      setActiveTab("agent");
+      return;
+    }
+    try {
+      await joinTable(tableId, { buyIn: 2000, agentId: boundAgent.agentId });
+      navigate(`/game/${tableId}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("绑定") || msg.includes("Agent")) {
+        toast.error(msg);
+        setActiveTab("agent");
+      } else {
+        navigate(`/game/${tableId}`);
+      }
+    }
   };
 
   const statusColor = (s: string) => {
@@ -90,13 +128,13 @@ export default function LobbyPage() {
             style={{ background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.2)' }}>
             <div className="w-2 h-2 rounded-full bg-[#00D4FF]" style={{ animation: 'pulse-blue 2s ease-in-out infinite' }} />
             <span className="text-sm font-semibold" style={{ fontFamily: 'JetBrains Mono, monospace', color: '#00D4FF' }}>{myAgent.name}</span>
-            <span className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(0,212,255,0.6)' }}>已就绪</span>
+            <span className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(0,212,255,0.6)' }}>{myAgent.status === "offline" ? "未绑定" : "已就绪"}</span>
           </div>
           <div className="flex items-center gap-2 px-4 py-2 rounded-lg"
             style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.2)' }}>
             <span style={{ fontSize: '0.9rem' }}>🪙</span>
             <span className="text-sm font-bold number-display" style={{ color: '#C9A84C' }}>
-              {myAgent.chips.toLocaleString()}
+              {walletBalance.toLocaleString()}
             </span>
             <span className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(201,168,76,0.6)' }}>游戏币</span>
           </div>
@@ -105,7 +143,7 @@ export default function LobbyPage() {
             style={{ padding: '7px 14px', borderRadius: 8, background: 'linear-gradient(135deg, #C9A84C, #8A6E30)', color: '#0A0A0F', fontFamily: 'Rajdhani, sans-serif', border: 'none', cursor: 'pointer' }}>
             + 充値
           </button>
-          <button onClick={() => navigate("/auth")}
+          <button onClick={() => { clearToken(); navigate("/auth"); }}
             className="text-xs tracking-wider hover:text-[#C9A84C] transition-colors"
             style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.4)' }}>
             退出
@@ -146,9 +184,12 @@ export default function LobbyPage() {
                     共 {tables.length} 张牌桌 · {tables.filter(t => t.status === "playing").length} 张进行中
                   </p>
                 </div>
-                <button onClick={() => toast.info("创建私人牌桌功能即将开放")}
+                <button onClick={() => setShowCreateModal(true)}
                   className="btn-ghost-gold px-5 py-2.5 rounded-lg text-sm">
                   + 创建牌桌
+                </button>
+                <button onClick={() => loadData()} className="btn-ghost-gold px-5 py-2.5 rounded-lg text-sm ml-2">
+                  刷新
                 </button>
               </div>
 
@@ -157,8 +198,15 @@ export default function LobbyPage() {
                   const phaseColorMap: Record<string, string> = {
                     PREFLOP: "#C9A84C", FLOP: "#00D4FF", TURN: "#80FF80",
                     RIVER: "#FF8C00", SHOWDOWN: "#FF4444",
+                    PLAYING: "#00D4FF", WAITING: "#C9A84C",
+                  };
+                  const phaseLabelMap: Record<string, string> = {
+                    PREFLOP: "PREFLOP", FLOP: "FLOP", TURN: "TURN",
+                    RIVER: "RIVER", SHOWDOWN: "SHOWDOWN",
+                    PLAYING: "对局中", WAITING: "等待中",
                   };
                   const phaseCol = phaseColorMap[table.phase] || "#C9A84C";
+                  const phaseLabel = phaseLabelMap[table.phase] || table.phase;
                   return (
                   <motion.div key={table.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
                     className="glass-card rounded-xl overflow-hidden group cursor-pointer hover:scale-[1.02] transition-all duration-300"
@@ -177,9 +225,9 @@ export default function LobbyPage() {
                       <div className="flex flex-col items-end gap-1.5">
                         <div className="flex items-center gap-1.5">
                           <div className="w-1.5 h-1.5 rounded-full" style={{ background: phaseCol, animation: 'pulse-blue 2s infinite' }} />
-                          <span className="text-xs font-bold" style={{ fontFamily: 'Rajdhani, sans-serif', color: phaseCol }}>{table.phase}</span>
+                          <span className="text-xs font-bold" style={{ fontFamily: 'Rajdhani, sans-serif', color: phaseCol }}>{phaseLabel}</span>
                         </div>
-                        <span className="text-[10px]" style={{ fontFamily: 'JetBrains Mono, monospace', color: 'rgba(245,230,200,0.3)' }}>Hand #{table.handNum}</span>
+                        {table.handNum > 0 && <span className="text-[10px]" style={{ fontFamily: 'JetBrains Mono, monospace', color: 'rgba(245,230,200,0.3)' }}>Hand #{table.handNum}</span>}
                       </div>
                     </div>
 
@@ -194,7 +242,9 @@ export default function LobbyPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.4)' }}>进行中</span>
+                          <span className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.4)' }}>
+                            {table.players}/{table.maxPlayers} 人
+                          </span>
                         </div>
                       </div>
 
@@ -221,13 +271,16 @@ export default function LobbyPage() {
                           )}
                         </div>
                         <span className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.45)' }}>
-                          {table.agents.length} AI 参赛
+                          {table.agents.length > 0 ? `${table.agents.length} 位玩家` : "空桌"}
                         </span>
                       </div>
 
                       {/* Agent name list */}
                       <div className="text-[10px] mb-3 leading-relaxed" style={{ fontFamily: 'JetBrains Mono, monospace', color: 'rgba(245,230,200,0.3)' }}>
-                        {table.agents.slice(0, 3).join(" · ")}{table.agents.length > 3 ? ` · +${table.agents.length - 3}` : ""}
+                        {table.agents.length > 0
+                          ? table.agents.slice(0, 3).join(" · ") + (table.agents.length > 3 ? ` · +${table.agents.length - 3}` : "")
+                          : "暂无玩家 · 等待加入..."
+                        }
                       </div>
 
                       <button className="w-full py-2.5 rounded-lg text-sm font-bold tracking-wider uppercase transition-all"
@@ -237,7 +290,10 @@ export default function LobbyPage() {
                           color: phaseCol,
                           border: `1px solid ${phaseCol}35`,
                         }}>
-                        {table.phase === "SHOWDOWN" ? "⚡ 摊牌中 — 观战" : `观战 ${table.phase} →`}
+                        {table.status === "playing"
+                          ? (table.phase === "SHOWDOWN" ? "⚡ 摊牌中 — 观战" : "观战对局 →")
+                          : agents.find(a => a.status !== "offline") ? "加入牌桌 →" : "🔗 绑定 Agent 后加入"
+                        }
                       </button>
                     </div>
                   </motion.div>
@@ -267,11 +323,10 @@ export default function LobbyPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="grid grid-cols-2 gap-4 mb-6">
                     {[
-                      { label: "胜场", value: myAgent.wins, color: "#C9A84C" },
-                      { label: "败场", value: myAgent.losses, color: "#FF4444" },
-                      { label: "胜率", value: `${myAgent.winRate}%`, color: "#00D4FF" },
+                      { label: "状态", value: myAgent.status === "offline" ? "离线" : "在线", color: myAgent.status === "offline" ? "#FF4444" : "#00D4FF" },
+                      { label: "模型", value: myAgent.model ?? "未设置", color: "#C9A84C" },
                     ].map((s, i) => (
                       <div key={i} className="text-center p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                         <div className="text-2xl font-bold number-display" style={{ color: s.color }}>{s.value}</div>
@@ -281,13 +336,21 @@ export default function LobbyPage() {
                   </div>
 
                   <div className="p-3 rounded-lg mb-4" style={{ background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.15)' }}>
-                    <div className="text-xs mb-1" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(0,212,255,0.6)' }}>当前令牌</div>
-                    <div className="font-mono text-sm" style={{ color: '#00D4FF' }}>{myAgent.token}</div>
+                    <div className="text-xs mb-1" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(0,212,255,0.6)' }}>Agent ID</div>
+                    <div className="font-mono text-sm" style={{ color: '#00D4FF' }}>{myAgent.agentId || "—"}</div>
                   </div>
 
-                  <button onClick={() => setShowBindModal(true)} className="btn-blue w-full py-3 rounded-lg text-sm">
-                    重新绑定 Agent
-                  </button>
+                  <div className="flex gap-3">
+                    <button onClick={() => { setBindingAgentId(myAgent.agentId); setShowBindModal(true); }} className="btn-blue flex-1 py-3 rounded-lg text-sm">
+                      绑定网关
+                    </button>
+                    {myAgent.status !== "offline" && (
+                      <button onClick={async () => { try { await unbindAgent(myAgent.agentId); toast.success("已解绑"); loadData(); } catch { toast.error("解绑失败"); } }}
+                        className="btn-ghost-gold flex-1 py-3 rounded-lg text-sm">
+                        解绑
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Bind Instructions */}
@@ -369,8 +432,8 @@ export default function LobbyPage() {
           <span style={{ fontSize: '1rem' }}>🪙</span>
           <div>
             <span style={{ fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, fontSize: '0.82rem', color: '#F5E6C8' }}>游戏币余额：</span>
-            <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '1rem', color: '#C9A84C', marginLeft: 6 }}>125,000</span>
-            <span style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', color: 'rgba(245,230,200,0.35)', marginLeft: 8 }}>· AI Agent 每手参赛消耗游戏币，赢得底池即返还</span>
+            <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '1rem', color: '#C9A84C', marginLeft: 6 }}>{walletBalance.toLocaleString()}</span>
+            <span style={{ fontFamily: 'Rajdhani, sans-serif', fontSize: '0.72rem', color: 'rgba(245,230,200,0.35)', marginLeft: 8 }}>· 每手底池抽水 5%（封顶 3 倍大盲），赢得底池即返还到钱包</span>
           </div>
         </div>
         <button onClick={() => navigate("/recharge")}
@@ -385,61 +448,143 @@ export default function LobbyPage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}
-            onClick={() => { setShowBindModal(false); setBindStep(0); setGeneratedToken(""); }}>
+            onClick={() => { setShowBindModal(false); setBindStep(0); setBindUrl(""); setBToken(""); }}>
             <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
               className="glass-card rounded-2xl p-8 max-w-md w-full"
               style={{ border: '1px solid rgba(0,212,255,0.3)' }}
               onClick={e => e.stopPropagation()}>
-              <h3 className="text-2xl font-bold mb-2" style={{ fontFamily: 'Cinzel, serif', color: '#00D4FF' }}>绑定 Agent</h3>
+              <h3 className="text-2xl font-bold mb-2" style={{ fontFamily: 'Cinzel, serif', color: '#00D4FF' }}>绑定 OpenClaw 网关</h3>
               <p className="text-sm mb-6" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.5)' }}>
-                生成专属令牌，将 OpenClaw 脚本连接到你的账号
+                输入 OpenClaw Gateway 地址和令牌，连接 AI Agent
               </p>
 
-              {bindStep === 0 ? (
-                <div className="text-center">
-                  <div className="w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center"
-                    style={{ background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.3)' }}>
-                    <span className="text-3xl">🔑</span>
-                  </div>
-                  <p className="text-sm mb-6" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.6)' }}>
-                    点击下方按钮生成一个有效期 5 分钟的专属加密令牌
-                  </p>
-                  <button onClick={handleGenerateToken} className="btn-blue w-full py-3 rounded-lg">
-                    生成令牌
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs tracking-widest uppercase mb-2" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(0,212,255,0.6)' }}>
+                    Gateway URL
+                  </label>
+                  <input type="text" value={bindUrl} onChange={e => setBindUrl(e.target.value)}
+                    placeholder="ws://192.168.1.63:18789"
+                    className="w-full px-4 py-3 rounded-lg text-sm outline-none"
+                    style={{ background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.25)', color: '#00D4FF', fontFamily: 'JetBrains Mono, monospace' }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs tracking-widest uppercase mb-2" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(0,212,255,0.6)' }}>
+                    Gateway Token
+                  </label>
+                  <input type="text" value={bindToken} onChange={e => setBToken(e.target.value)}
+                    placeholder="e59050bb693aa087..."
+                    className="w-full px-4 py-3 rounded-lg text-sm outline-none"
+                    style={{ background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.25)', color: '#00D4FF', fontFamily: 'JetBrains Mono, monospace' }}
+                  />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button onClick={async () => {
+                    if (!bindUrl || !bindToken) { toast.error("请填写完整信息"); return; }
+                    try {
+                      await bindAgent(bindingAgentId, { gatewayUrl: bindUrl, gatewayToken: bindToken });
+                      toast.success("Agent 绑定成功！");
+                      setShowBindModal(false); setBindStep(0); setBindUrl(""); setBToken("");
+                      loadData();
+                    } catch (err) { toast.error("绑定失败"); }
+                  }} className="btn-gold flex-1 py-3 rounded-lg text-sm">
+                    确认绑定
+                  </button>
+                  <button onClick={() => { setShowBindModal(false); setBindStep(0); setBindUrl(""); setBToken(""); }}
+                    className="btn-ghost-gold flex-1 py-3 rounded-lg text-sm">
+                    取消
                   </button>
                 </div>
-              ) : (
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Create Table Modal */}
+      <AnimatePresence>
+        {showCreateModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}
+            onClick={() => setShowCreateModal(false)}>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+              className="glass-card rounded-2xl p-8 max-w-md w-full"
+              style={{ border: '1px solid rgba(201,168,76,0.3)' }}
+              onClick={e => e.stopPropagation()}>
+              <h3 className="text-2xl font-bold mb-2" style={{ fontFamily: 'Cinzel, serif', color: '#C9A84C' }}>创建牌桌</h3>
+              <p className="text-sm mb-6" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.5)' }}>
+                设置盲注和桌名，创建专属 AI 对局牌桌
+              </p>
+
+              <div className="space-y-4">
                 <div>
-                  <div className="p-4 rounded-xl mb-4" style={{ background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.25)' }}>
-                    <div className="text-xs mb-2 tracking-wider uppercase" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(0,212,255,0.6)' }}>
-                      专属令牌 · 有效期 5 分钟
-                    </div>
-                    <div className="text-2xl font-bold text-center py-2" style={{ fontFamily: 'JetBrains Mono, monospace', color: '#00D4FF', letterSpacing: '0.15em' }}>
-                      {generatedToken}
-                    </div>
+                  <label className="block text-xs tracking-widest uppercase mb-2" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(201,168,76,0.6)' }}>
+                    牌桌名称（可选）
+                  </label>
+                  <input type="text" value={newTableName} onChange={e => setNewTableName(e.target.value)}
+                    placeholder="如: 我的练习桌"
+                    className="w-full px-4 py-3 rounded-lg text-sm outline-none"
+                    style={{ background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.25)', color: '#F5E6C8', fontFamily: 'Rajdhani, sans-serif' }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs tracking-widest uppercase mb-2" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(201,168,76,0.6)' }}>
+                      小盲注
+                    </label>
+                    <input type="number" value={newSmallBlind} onChange={e => setNewSmallBlind(e.target.value)}
+                      className="w-full px-4 py-3 rounded-lg text-sm outline-none"
+                      style={{ background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.25)', color: '#C9A84C', fontFamily: 'Oswald, sans-serif' }}
+                    />
                   </div>
-                  <div className="p-3 rounded-lg mb-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <div className="text-xs mb-1" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.4)' }}>在终端运行：</div>
-                    <div className="text-sm font-mono" style={{ color: '#00D4FF' }}>
-                      node agent.js --token={generatedToken}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mb-6 p-3 rounded-lg" style={{ background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.2)' }}>
-                    <div className="w-2 h-2 rounded-full bg-[#C9A84C] breathing" />
-                    <span className="text-sm" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.6)' }}>等待 Agent 连接...</span>
-                  </div>
-                  <div className="flex gap-3">
-                    <button onClick={() => { setShowBindModal(false); setBindStep(0); setGeneratedToken(""); toast.success("Agent 绑定成功！"); }}
-                      className="btn-gold flex-1 py-3 rounded-lg text-sm">
-                      确认连接
-                    </button>
-                    <button onClick={() => { setShowBindModal(false); setBindStep(0); setGeneratedToken(""); }}
-                      className="btn-ghost-gold flex-1 py-3 rounded-lg text-sm">
-                      取消
-                    </button>
+                  <div>
+                    <label className="block text-xs tracking-widest uppercase mb-2" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(201,168,76,0.6)' }}>
+                      大盲注
+                    </label>
+                    <input type="number" value={newBigBlind} onChange={e => setNewBigBlind(e.target.value)}
+                      className="w-full px-4 py-3 rounded-lg text-sm outline-none"
+                      style={{ background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.25)', color: '#C9A84C', fontFamily: 'Oswald, sans-serif' }}
+                    />
                   </div>
                 </div>
-              )}
+
+                <div className="p-3 rounded-lg" style={{ background: 'rgba(201,168,76,0.04)', border: '1px solid rgba(201,168,76,0.12)' }}>
+                  <div className="text-xs" style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(245,230,200,0.45)' }}>
+                    创建后，你和其他玩家可加入此牌桌，至少 2 人即可开始对局。AI Agent 将通过 OpenClaw 网关参与博弈。
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button disabled={creatingTable} onClick={async () => {
+                    setCreatingTable(true);
+                    try {
+                      const sb = Number(newSmallBlind) || 10;
+                      const bb = Number(newBigBlind) || 20;
+                      const res = await createTable({
+                        smallBlind: sb,
+                        bigBlind: bb,
+                        ...(newTableName.trim() ? { name: newTableName.trim() } : {}),
+                      });
+                      toast.success(`牌桌「${res.table.name ?? res.table.tableId}」创建成功！`);
+                      setShowCreateModal(false);
+                      setNewTableName(""); setNewSmallBlind("10"); setNewBigBlind("20");
+                      loadData();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "创建失败");
+                    } finally {
+                      setCreatingTable(false);
+                    }
+                  }} className="btn-gold flex-1 py-3 rounded-lg text-sm disabled:opacity-50">
+                    {creatingTable ? "创建中..." : "创建牌桌"}
+                  </button>
+                  <button onClick={() => setShowCreateModal(false)}
+                    className="btn-ghost-gold flex-1 py-3 rounded-lg text-sm">
+                    取消
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}

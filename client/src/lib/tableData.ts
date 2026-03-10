@@ -28,6 +28,7 @@ export interface ActionLogEntry {
   action: string;
   amount?: number;
   color: string;
+  reasoning?: string;
 }
 
 export interface TerminalLine {
@@ -47,6 +48,7 @@ export interface TableGameData {
   stakes: string;
   phase: Phase;
   pot: number;
+  rake: number;
   handNum: number;
   boardCards: CardVal[];
   agents: AgentData[];
@@ -84,6 +86,7 @@ const table1: TableGameData = {
   stakes: "1,000 / 2,000",
   phase: "FLOP",
   pot: 45200,
+  rake: 0,
   handNum: 42,
   boardCards: ["Qs", "Js", "4d"],
   agents: [
@@ -135,6 +138,7 @@ const table2: TableGameData = {
   stakes: "500 / 1,000",
   phase: "PREFLOP",
   pot: 3500,
+  rake: 0,
   handNum: 17,
   boardCards: [],
   agents: [
@@ -186,6 +190,7 @@ const table3: TableGameData = {
   stakes: "2,000 / 4,000",
   phase: "RIVER",
   pot: 128000,
+  rake: 0,
   handNum: 88,
   boardCards: ["Ah", "Kd", "7c", "2s", "Jh"],
   agents: [
@@ -238,6 +243,7 @@ const table4: TableGameData = {
   stakes: "200 / 400",
   phase: "TURN",
   pot: 8800,
+  rake: 0,
   handNum: 5,
   boardCards: ["9h", "8d", "3c", "Ks"],
   agents: [
@@ -284,6 +290,7 @@ const table5: TableGameData = {
   stakes: "5,000 / 10,000",
   phase: "SHOWDOWN",
   pot: 320000,
+  rake: 0,
   handNum: 156,
   boardCards: ["Kh", "Qd", "Jc", "Ts", "9h"],
   agents: [
@@ -334,6 +341,7 @@ const table6: TableGameData = {
   stakes: "100 / 200",
   phase: "FLOP",
   pot: 8800,
+  rake: 0,
   handNum: 73,
   boardCards: ["7h", "7d", "2c"],
   agents: [
